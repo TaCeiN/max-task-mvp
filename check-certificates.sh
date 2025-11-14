@@ -119,6 +119,7 @@ check_certificate() {
 }
 
 # Функция для поиска сертификата в Docker volume
+# Универсальный поиск - находит сертификаты независимо от структуры и имен файлов
 find_cert_in_volume() {
     local domain=$1
     
@@ -143,29 +144,151 @@ find_cert_in_volume() {
         return 1
     fi
     
-    # Проверяем наличие файлов
-    local cert_exists
-    local key_exists
-    cert_exists=$(docker exec "$temp_container" test -f "/certs/${domain}.crt" && echo "yes" || echo "no")
-    key_exists=$(docker exec "$temp_container" test -f "/certs/${domain}.key" && echo "yes" || echo "no")
+    # Устанавливаем openssl в контейнере
+    docker exec "$temp_container" apk add --no-cache openssl >/dev/null 2>&1 || true
     
-    if [ "$cert_exists" = "yes" ] && [ "$key_exists" = "yes" ]; then
-        # Копируем файлы во временную директорию для проверки
-        local temp_dir
-        temp_dir=$(mktemp -d)
-        docker cp "$temp_container:/certs/${domain}.crt" "$temp_dir/${domain}.crt" >/dev/null 2>&1
-        docker cp "$temp_container:/certs/${domain}.key" "$temp_dir/${domain}.key" >/dev/null 2>&1
-        
-        # Проверяем сертификат
-        if check_certificate "$domain" "$temp_dir/${domain}.crt" "$temp_dir/${domain}.key"; then
-            rm -rf "$temp_dir"
-            docker stop "$temp_container" >/dev/null 2>&1
-            return 0
-        fi
-        
-        rm -rf "$temp_dir"
+    # Ищем все потенциальные файлы сертификатов (включая поддиректории)
+    # Исключаем файлы ключей и dhparam
+    local cert_files
+    cert_files=$(docker exec "$temp_container" find /certs -type f \( -name "*.crt" -o -name "*.pem" \) 2>/dev/null | \
+        grep -v "\.key$" | \
+        grep -v "key\.pem$" | \
+        grep -v "privkey" | \
+        grep -v "dhparam" | \
+        grep -v "\.csr$" || true)
+    
+    if [ -z "$cert_files" ]; then
+        docker stop "$temp_container" >/dev/null 2>&1
+        return 1
     fi
     
+    # Создаем временную директорию для проверки
+    local temp_dir
+    temp_dir=$(mktemp -d)
+    
+    # Проверяем каждый найденный файл
+    while IFS= read -r cert_file; do
+        if [ -z "$cert_file" ]; then
+            continue
+        fi
+        
+        # Копируем сертификат для проверки
+        docker cp "$temp_container:${cert_file}" "$temp_dir/cert_to_check.crt" >/dev/null 2>&1
+        
+        if [ ! -f "$temp_dir/cert_to_check.crt" ]; then
+            continue
+        fi
+        
+        # Проверяем, что это валидный сертификат (формат X.509)
+        if ! openssl x509 -in "$temp_dir/cert_to_check.crt" -noout -text >/dev/null 2>&1; then
+            rm -f "$temp_dir/cert_to_check.crt"
+            continue
+        fi
+        
+        # Проверяем, что сертификат соответствует домену
+        # Извлекаем все домены из сертификата (CN и SAN)
+        local cert_domains
+        cert_domains=$(openssl x509 -in "$temp_dir/cert_to_check.crt" -noout -text 2>/dev/null | \
+            grep -E "(Subject:|DNS:)" | \
+            sed -n 's/.*CN=\([^,]*\).*/\1/p; s/.*DNS:\([^, ]*\).*/\1/p' | \
+            tr -d ' ' | \
+            grep -v "^$" || echo "")
+        
+        # Проверяем соответствие домену (точное совпадение или поддомен)
+        local domain_match=0
+        while IFS= read -r cert_domain; do
+            if [ -z "$cert_domain" ]; then
+                continue
+            fi
+            # Точное совпадение
+            if [ "$cert_domain" = "$domain" ]; then
+                domain_match=1
+                break
+            fi
+            # Поддомен (например, *.example.com покрывает sub.example.com)
+            if echo "$cert_domain" | grep -qE "^\*\.${domain#*.}$" && [ "$domain" != "${domain#*.}" ]; then
+                domain_match=1
+                break
+            fi
+        done <<< "$cert_domains"
+        
+        if [ $domain_match -eq 0 ]; then
+            rm -f "$temp_dir/cert_to_check.crt"
+            continue
+        fi
+        
+        # Проверяем валидность срока действия (минимум 7 дней)
+        if ! openssl x509 -checkend $((7 * 24 * 60 * 60)) -noout -in "$temp_dir/cert_to_check.crt" >/dev/null 2>&1; then
+            rm -f "$temp_dir/cert_to_check.crt"
+            continue
+        fi
+        
+        # Нашли валидный сертификат для домена, теперь ищем соответствующий ключ
+        # Ищем ключ в той же директории, что и сертификат
+        local cert_dir=$(dirname "$cert_file")
+        local key_files
+        
+        # Сначала ищем в той же директории
+        key_files=$(docker exec "$temp_container" find "$cert_dir" -maxdepth 1 -type f \( -name "*.key" -o -name "*key.pem" -o -name "privkey.pem" \) 2>/dev/null || true)
+        
+        # Если не нашли, ищем во всем volume
+        if [ -z "$key_files" ]; then
+            key_files=$(docker exec "$temp_container" find /certs -type f \( -name "*.key" -o -name "*key.pem" -o -name "privkey.pem" \) 2>/dev/null | \
+                grep -v "dhparam" || true)
+        fi
+        
+        # Проверяем каждый найденный ключ
+        while IFS= read -r key_file; do
+            if [ -z "$key_file" ]; then
+                continue
+            fi
+            
+            # Копируем ключ
+            docker cp "$temp_container:${key_file}" "$temp_dir/key_to_check.key" >/dev/null 2>&1
+            
+            if [ ! -f "$temp_dir/key_to_check.key" ]; then
+                continue
+            fi
+            
+            # Проверяем, что ключ соответствует сертификату
+            # Используем сравнение публичных ключей - самый надежный способ
+            local cert_pubkey
+            local key_pubkey
+            
+            # Извлекаем публичный ключ из сертификата
+            cert_pubkey=$(openssl x509 -noout -pubkey -in "$temp_dir/cert_to_check.crt" 2>/dev/null | openssl pkey -pubin -outform DER 2>/dev/null | openssl md5 2>/dev/null | awk '{print $NF}' || echo "")
+            
+            # Извлекаем публичный ключ из приватного ключа
+            key_pubkey=$(openssl pkey -in "$temp_dir/key_to_check.key" -pubout -outform DER 2>/dev/null | openssl md5 2>/dev/null | awk '{print $NF}' || echo "")
+            
+            # Если не получилось через DER, пробуем через modulus для RSA
+            if [ -z "$cert_pubkey" ] || [ -z "$key_pubkey" ] || [ "$cert_pubkey" != "$key_pubkey" ]; then
+                # Для RSA ключей сравниваем modulus
+                cert_pubkey=$(openssl x509 -noout -modulus -in "$temp_dir/cert_to_check.crt" 2>/dev/null | openssl md5 2>/dev/null | awk '{print $NF}' || echo "")
+                key_pubkey=$(openssl rsa -noout -modulus -in "$temp_dir/key_to_check.key" 2>/dev/null | openssl md5 2>/dev/null | awk '{print $NF}' || echo "")
+            fi
+            
+            # Проверяем совпадение публичных ключей
+            if [ -n "$cert_pubkey" ] && [ -n "$key_pubkey" ] && [ "$cert_pubkey" = "$key_pubkey" ]; then
+                # Нашли подходящую пару сертификат+ключ!
+                mv "$temp_dir/cert_to_check.crt" "$temp_dir/${domain}.crt"
+                mv "$temp_dir/key_to_check.key" "$temp_dir/${domain}.key"
+                
+                # Финальная проверка через функцию check_certificate
+                if check_certificate "$domain" "$temp_dir/${domain}.crt" "$temp_dir/${domain}.key"; then
+                    rm -rf "$temp_dir"
+                    docker stop "$temp_container" >/dev/null 2>&1
+                    return 0
+                fi
+            fi
+            
+            rm -f "$temp_dir/key_to_check.key"
+        done <<< "$key_files"
+        
+        rm -f "$temp_dir/cert_to_check.crt"
+    done <<< "$cert_files"
+    
+    rm -rf "$temp_dir"
     docker stop "$temp_container" >/dev/null 2>&1
     return 1
 }
