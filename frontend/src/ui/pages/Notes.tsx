@@ -381,6 +381,11 @@ export default function Notes() {
   const setSelectedNoteIdWrapper = (value: number | null, reason?: string) => {
     setSelectedNoteId(value)
   }
+  
+  const setSelectedNoteIdWithLog = (value: number | null, reason?: string) => {
+    console.log(`[Notes] setSelectedNoteId: ${value}, reason: ${reason}`)
+    setSelectedNoteId(value)
+  }
   const [newFolderName, setNewFolderName] = useState('')
   const [showNewFolderInput, setShowNewFolderInput] = useState(false)
   
@@ -821,7 +826,8 @@ export default function Notes() {
       setShowNewFolderInput(false)
     },
     onError: async (e) => {
-      await alert('Не удалось создать папку')
+      const errorMessage = e instanceof Error ? e.message : String(e)
+      await alert(`Не удалось создать папку: ${errorMessage}`)
     }
   })
 
@@ -838,9 +844,9 @@ export default function Notes() {
         setSelectedNoteIdWithLog(null, 'при удалении папки')
       }
     },
-    onError: async (e: any) => {
-      const errorMessage = e?.response?.data?.detail || 'Не удалось удалить папку'
-      await alert(errorMessage)
+    onError: async (e) => {
+      const errorMessage = e instanceof Error ? e.message : String(e)
+      await alert(`Не удалось удалить папку: ${errorMessage}`)
     }
   })
 
@@ -857,7 +863,8 @@ export default function Notes() {
       setSelectedNoteIdWithLog(note.id, 'при создании заметки в Notes.tsx')
     },
     onError: async (e) => {
-      await alert('Не удалось создать заметку')
+      const errorMessage = e instanceof Error ? e.message : String(e)
+      await alert(`Не удалось создать заметку: ${errorMessage}`)
     }
   })
 
@@ -940,7 +947,8 @@ export default function Notes() {
       setSelectedNoteIdWithLog(null, 'при удалении заметки')
     },
     onError: async (e) => {
-      await alert('Не удалось удалить заметку')
+      const errorMessage = e instanceof Error ? e.message : String(e)
+      await alert(`Не удалось удалить заметку: ${errorMessage}`)
     }
   })
 
@@ -953,7 +961,8 @@ export default function Notes() {
       qc.invalidateQueries({ queryKey: ['favoriteNote'] })
     },
     onError: async (e) => {
-      await alert('Не удалось изменить избранное')
+      const errorMessage = e instanceof Error ? e.message : String(e)
+      await alert(`Не удалось изменить избранное: ${errorMessage}`)
     }
   })
 
@@ -1057,7 +1066,8 @@ export default function Notes() {
       qc.invalidateQueries({ queryKey: ['notes'] })
     },
     onError: async (e) => {
-      await alert('Не удалось удалить дедлайн')
+      const errorMessage = e instanceof Error ? e.message : String(e)
+      await alert(`Не удалось удалить дедлайн: ${errorMessage}`)
     }
   })
 
@@ -1069,7 +1079,8 @@ export default function Notes() {
       qc.invalidateQueries({ queryKey: ['notes'] })
     },
     onError: async (e) => {
-      await alert('Не удалось переключить уведомления')
+      const errorMessage = e instanceof Error ? e.message : String(e)
+      await alert(`Не удалось переключить уведомления: ${errorMessage}`)
     }
   })
 
