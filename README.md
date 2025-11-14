@@ -1,4 +1,4 @@
-# UniTask Tracker (VK Mini App stub)
+# Max Task WebAPP
 
 Моно-репозиторий: FastAPI (backend) + React/Vite (frontend). Хранилище — SQLite. RU интерфейс, тёмная/светлая темы, задачи, заметки, теги, режимы фокуса (Помодоро), напоминания по дедлайнам.
 
