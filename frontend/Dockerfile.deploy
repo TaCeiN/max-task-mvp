@@ -1,0 +1,47 @@
+# Dockerfile для деплоя фронтенда на GitHub Pages (вариант 1)
+FROM node:20-alpine
+
+# Устанавливаем git и другие необходимые инструменты
+RUN apk add --no-cache git openssh
+
+WORKDIR /app
+
+# Копируем package файлы
+COPY package*.json ./
+
+# Устанавливаем зависимости
+RUN npm ci
+
+# Копируем исходный код
+COPY . .
+
+# Проверяем, что файлы скопированы (для отладки)
+RUN echo "📋 Checking utils files..." && \
+    if [ -f src/utils/faq.ts ]; then \
+      echo "✅ faq.ts found in utils"; \
+      ls -lh src/utils/faq.ts; \
+    else \
+      echo "❌ faq.ts NOT found in utils"; \
+      echo "Contents of src/utils/:"; \
+      ls -la src/utils/ 2>/dev/null || echo "⚠️  utils directory not found"; \
+    fi
+
+# Делаем deploy.sh исполняемым
+RUN chmod +x /app/deploy.sh
+
+# Аргументы для деплоя (передаются при сборке)
+ARG VITE_API_URL
+ARG GITHUB_REPO=tacein/tacein.github.io
+ARG GITHUB_USER=tacein
+ARG GITHUB_EMAIL
+
+# Переменные окружения (будут переопределены через environment в docker-compose)
+ENV VITE_API_URL=${VITE_API_URL}
+ENV GITHUB_REPO=${GITHUB_REPO}
+ENV GITHUB_USER=${GITHUB_USER}
+ENV GITHUB_EMAIL=${GITHUB_EMAIL}
+# GITHUB_TOKEN передается только через environment, не через ARG (безопасность)
+
+# Запускаем деплой (GITHUB_TOKEN будет передан через environment)
+CMD ["/app/deploy.sh"]
+

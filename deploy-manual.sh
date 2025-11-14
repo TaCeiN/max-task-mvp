@@ -1,0 +1,201 @@
+#!/bin/bash
+# Скрипт для сборки фронтенда для ручного деплоя через Docker (вариант 2)
+# Убедитесь, что файл .env существует и содержит все необходимые переменные
+
+set -e
+
+echo "=========================================="
+echo "🔨 Сборка для ручного деплоя (вариант 2)"
+echo "=========================================="
+echo ""
+
+# Проверяем наличие .env файла
+if [ ! -f .env ]; then
+    echo "❌ Error: .env file not found!"
+    echo "Please create .env file based on env.example"
+    echo ""
+    echo "Example:"
+    echo "  cp env.example .env"
+    echo "  # Then edit .env and fill in all required values"
+    exit 1
+fi
+
+echo "📋 Loading environment variables from .env..."
+# Загружаем переменные из .env (игнорируем комментарии и пустые строки)
+export $(grep -v '^#' .env | grep -v '^$' | xargs)
+
+# Проверяем обязательные переменные
+if [ -z "$MAX_BOT_TOKEN" ]; then
+    echo "❌ Error: MAX_BOT_TOKEN is not set in .env"
+    exit 1
+fi
+
+if [ -z "$BACKEND_DOMAIN" ]; then
+    echo "❌ Error: BACKEND_DOMAIN is not set in .env"
+    exit 1
+fi
+
+if [ -z "$WEBHOOK_DOMAIN" ]; then
+    echo "❌ Error: WEBHOOK_DOMAIN is not set in .env"
+    exit 1
+fi
+
+if [ -z "$BACKEND_URL" ]; then
+    echo "❌ Error: BACKEND_URL is not set in .env"
+    exit 1
+fi
+
+if [ -z "$WEBHOOK_URL" ]; then
+    echo "❌ Error: WEBHOOK_URL is not set in .env"
+    exit 1
+fi
+
+if [ -z "$SECRET_KEY" ]; then
+    echo "❌ Error: SECRET_KEY is not set in .env"
+    exit 1
+fi
+
+if [ -z "$LETSENCRYPT_EMAIL" ]; then
+    echo "❌ Error: LETSENCRYPT_EMAIL is not set in .env (required for SSL certificates)"
+    exit 1
+fi
+
+echo "✅ Environment variables loaded"
+echo "   BACKEND_DOMAIN: ${BACKEND_DOMAIN}"
+echo "   WEBHOOK_DOMAIN: ${WEBHOOK_DOMAIN}"
+echo "   BACKEND_URL: ${BACKEND_URL}"
+echo "   WEBHOOK_URL: ${WEBHOOK_URL}"
+echo "   LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL}"
+echo ""
+
+echo "🔨 Building frontend..."
+docker compose -f docker-compose.manual.yml up --build frontend-build
+
+echo "⏳ Waiting for build to complete..."
+sleep 2
+
+echo "🔧 Starting Nginx reverse proxy and Let's Encrypt..."
+docker compose -f docker-compose.manual.yml up -d nginx-proxy letsencrypt
+
+echo "⏳ Waiting for Nginx proxy to be ready..."
+sleep 5
+
+# Функция для проверки и получения сертификатов
+check_and_obtain_certificates() {
+    local compose_file=$1
+    local max_attempts=2
+    local attempt=1
+    
+    echo ""
+    echo "🔒 Checking SSL certificates..."
+    
+    # Проверяем наличие скрипта проверки
+    if [ ! -f "./check-certificates.sh" ]; then
+        echo "⚠️  Warning: check-certificates.sh not found, skipping certificate validation"
+        return 0
+    fi
+    
+    # Делаем скрипт исполняемым
+    chmod +x ./check-certificates.sh 2>/dev/null || true
+    
+    # Проверяем сертификаты
+    while [ $attempt -le $max_attempts ]; do
+        if ./check-certificates.sh; then
+            echo ""
+            echo "✅ All SSL certificates are valid and will be used"
+            return 0
+        fi
+        
+        if [ $attempt -lt $max_attempts ]; then
+            echo "⚠️  Certificates not found or invalid, attempt $attempt/$max_attempts: trying to obtain..."
+            echo "   Restarting Let's Encrypt container..."
+            docker compose -f "$compose_file" restart letsencrypt
+            echo "   Waiting 60 seconds for certificate generation..."
+            sleep 60
+        fi
+        
+        attempt=$((attempt + 1))
+    done
+    
+    # Если не удалось получить сертификаты после всех попыток
+    echo ""
+    echo -e "\033[0;31m"
+    echo "=================================================================="
+    echo "⚠️  ВНИМАНИЕ: SSL СЕРТИФИКАТЫ НЕ ВАЛИДНЫ ИЛИ НЕ ПОЛУЧЕНЫ!"
+    echo "=================================================================="
+    echo ""
+    echo "Сертификаты для доменов не найдены или невалидны после $max_attempts попыток."
+    echo "Требуется ручная настройка SSL сертификатов."
+    echo ""
+    echo "Что делать:"
+    echo "1. Проверьте логи Let's Encrypt:"
+    echo "   docker compose -f $compose_file logs letsencrypt"
+    echo ""
+    echo "2. Убедитесь, что DNS записи настроены правильно:"
+    echo "   nslookup $BACKEND_DOMAIN"
+    echo "   nslookup $WEBHOOK_DOMAIN"
+    echo ""
+    echo "3. Проверьте, что порты 80 и 443 открыты в firewall"
+    echo ""
+    echo "4. Если вы достигли лимита Let's Encrypt rate limit, подождите"
+    echo "   или используйте существующие сертификаты (см. DOCKER.md)"
+    echo ""
+    echo "5. Деплой продолжается, но HTTPS может не работать до настройки сертификатов"
+    echo ""
+    echo "=================================================================="
+    echo -e "\033[0m"
+    echo ""
+    
+    return 1
+}
+
+# Проверяем и пытаемся получить сертификаты
+check_and_obtain_certificates "docker-compose.manual.yml" || true
+
+echo "🚀 Starting backend and webhook services..."
+docker compose -f docker-compose.manual.yml up -d backend webhook
+
+echo "⏳ Waiting for services to be ready..."
+sleep 5
+
+if [ $? -eq 0 ]; then
+    echo ""
+    echo "=========================================="
+    echo "✅ Build and deployment completed!"
+    echo "=========================================="
+    echo ""
+    echo "📊 Services status:"
+    docker compose -f docker-compose.manual.yml ps
+    echo ""
+    echo "🌐 Backend: ${BACKEND_URL}"
+    echo "🔔 Webhook: ${WEBHOOK_URL}"
+    echo ""
+    echo "🔒 SSL сертификаты будут автоматически получены и обновлены через Let's Encrypt"
+    echo "   Первый запуск может занять несколько минут для получения сертификатов"
+    echo ""
+    echo "📦 Frontend build files are in Docker volume 'frontend-build'"
+    echo ""
+    echo "📝 To copy frontend files from volume:"
+    echo "   docker run --rm -v unitask_frontend-build:/source -v \$(pwd)/frontend-dist:/dest alpine sh -c 'cp -r /source/* /dest/'"
+    echo ""
+    echo "   Or use docker cp:"
+    echo "   CONTAINER_ID=\$(docker create -v unitask_frontend-build:/source alpine)"
+    echo "   docker cp \$CONTAINER_ID:/source ./frontend-dist"
+    echo "   docker rm \$CONTAINER_ID"
+    echo ""
+    echo "📝 View logs:"
+    echo "   docker compose -f docker-compose.manual.yml logs -f"
+    echo ""
+    echo "📝 Check SSL certificate status:"
+    echo "   docker compose -f docker-compose.manual.yml logs letsencrypt"
+else
+    echo ""
+    echo "=========================================="
+    echo "❌ Build or deployment failed!"
+    echo "=========================================="
+    echo ""
+    echo "📝 Check logs:"
+    echo "   docker compose -f docker-compose.manual.yml logs"
+    exit 1
+fi
+
