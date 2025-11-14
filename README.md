@@ -63,28 +63,6 @@ http://localhost:5173/login?user_id=5107783&first_name=Иван&last_name=Ива
 
 Приложение автоматически извлечёт данные из URL, выполнит авторизацию/регистрацию и перенаправит на главную страницу.
 
-### Docker (Альтернативный способ)
-
-Если у вас установлен Docker:
-
-```bash
-# Windows
-docker-start.bat
-
-# Linux/Mac
-chmod +x docker-start.sh
-./docker-start.sh
-
-# Или вручную
-docker compose up -d --build
-```
-
-После запуска:
-- **Фронтенд**: http://localhost (порт 80)
-- **Бэкенд**: http://localhost:8000
-
-Подробная документация по Docker: [DOCKER.md](DOCKER.md)
-
 ## Деплой
 
 Проект поддерживает два варианта деплоя через Docker. Подробная инструкция: [DOCKER.md](DOCKER.md)
@@ -196,8 +174,4 @@ openssl rand -hex 32
 ```
 
 Подробнее см. [DOCKER.md](DOCKER.md)
-
-### Backend
-Любой VPS (Uvicorn/Gunicorn + Nginx), база — SQLite файл. Продакшн URL: `https://backend-devcore-max.cloudpub.ru`
-
 
