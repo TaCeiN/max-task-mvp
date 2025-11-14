@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getUserSettings, updateUserSettings, UserSettings } from '../../api/client'
 import { faqData, privacyPolicy, termsOfService, type FAQItem } from '../../utils/faq'
@@ -28,6 +28,8 @@ export default function Settings() {
 
   const [newNotificationTime, setNewNotificationTime] = useState<string>('')
   const [timeUnit, setTimeUnit] = useState<'minutes' | 'hours' | 'days'>('minutes')
+  const [isTimeUnitMenuOpen, setIsTimeUnitMenuOpen] = useState(false)
+  const timeUnitSelectorRef = useRef<HTMLDivElement>(null)
 
   const convertToMinutes = (value: number, unit: 'minutes' | 'hours' | 'days'): number => {
     switch (unit) {
@@ -68,6 +70,34 @@ export default function Settings() {
     const newTimes = currentTimes.filter(t => t !== minutes)
     updateSettings.mutate({ notification_times_minutes: newTimes })
   }
+
+  const timeUnitLabels: Record<'minutes' | 'hours' | 'days', string> = {
+    minutes: 'Минуты',
+    hours: 'Часы',
+    days: 'Дни'
+  }
+
+  const handleTimeUnitSelect = (unit: 'minutes' | 'hours' | 'days') => {
+    setTimeUnit(unit)
+    setIsTimeUnitMenuOpen(false)
+  }
+
+  // Закрытие меню при клике вне его
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (timeUnitSelectorRef.current && !timeUnitSelectorRef.current.contains(event.target as Node)) {
+        setIsTimeUnitMenuOpen(false)
+      }
+    }
+
+    if (isTimeUnitMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isTimeUnitMenuOpen])
 
   const formatTime = (minutes: number): string => {
     if (minutes >= 24 * 60) {
@@ -137,16 +167,76 @@ export default function Settings() {
               className="settings-input"
               style={{ flex: '1 1 auto', minWidth: '120px', maxWidth: '200px' }}
             />
-            <select
-              value={timeUnit}
-              onChange={(e) => setTimeUnit(e.target.value as 'minutes' | 'hours' | 'days')}
-              className="settings-input"
-              style={{ flex: '0 0 auto', minWidth: '100px', maxWidth: '120px', padding: '12px 16px', cursor: 'pointer' }}
-            >
-              <option value="minutes">Минуты</option>
-              <option value="hours">Часы</option>
-              <option value="days">Дни</option>
-            </select>
+            <div className="time-unit-selector" ref={timeUnitSelectorRef} style={{ position: 'relative', flex: '0 0 auto' }}>
+              <button
+                type="button"
+                className="time-unit-selector-button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setIsTimeUnitMenuOpen(!isTimeUnitMenuOpen)
+                }}
+              >
+                {timeUnitLabels[timeUnit]}
+                <svg 
+                  width="12" 
+                  height="12" 
+                  viewBox="0 0 12 12" 
+                  fill="none" 
+                  xmlns="http://www.w3.org/2000/svg"
+                  style={{ 
+                    marginLeft: '8px',
+                    transform: isTimeUnitMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 200ms cubic-bezier(0.4, 0, 0.2, 1)'
+                  }}
+                >
+                  <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+              {isTimeUnitMenuOpen && (
+                <>
+                  <div 
+                    style={{
+                      position: 'fixed',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      zIndex: 999
+                    }}
+                    onClick={() => setIsTimeUnitMenuOpen(false)}
+                  />
+                  <div className="time-unit-selector-menu">
+                    <div
+                      className={`time-unit-selector-item ${timeUnit === 'minutes' ? 'time-unit-selector-item--active' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleTimeUnitSelect('minutes')
+                      }}
+                    >
+                      Минуты
+                    </div>
+                    <div
+                      className={`time-unit-selector-item ${timeUnit === 'hours' ? 'time-unit-selector-item--active' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleTimeUnitSelect('hours')
+                      }}
+                    >
+                      Часы
+                    </div>
+                    <div
+                      className={`time-unit-selector-item ${timeUnit === 'days' ? 'time-unit-selector-item--active' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleTimeUnitSelect('days')
+                      }}
+                    >
+                      Дни
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
             <button
               className="settings-option"
               onClick={handleAddNotificationTime}
