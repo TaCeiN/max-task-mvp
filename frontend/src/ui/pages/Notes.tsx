@@ -403,12 +403,10 @@ export default function Notes() {
   // Состояния для дедлайнов
   const [showDeadlineModal, setShowDeadlineModal] = useState(false)
   
-  // Состояния для поиска с расширением вверх
-  const [isSearchFocused, setIsSearchFocused] = useState(false)
+  // Рефы для поиска
   const searchPillRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const topElementRef = useRef<HTMLDivElement>(null)
-  const [maxHeight, setMaxHeight] = useState<string | undefined>(undefined)
   
   const { data: folders, isLoading: foldersLoading } = useQuery({ 
     queryKey: ['folders'], 
@@ -584,7 +582,9 @@ export default function Notes() {
       }
     },
     enabled: !!selectedNoteId && isNoteTodo,
-    retry: false
+    retry: false,
+    refetchInterval: 60000, // Обновляем каждую минуту, чтобы статус обновлялся
+    refetchIntervalInBackground: true
   })
 
   // Фильтрация заметок по поисковому запросу
@@ -1139,61 +1139,6 @@ export default function Notes() {
     }
   }
 
-  // Вычисляем максимальную высоту для расширенного блока поиска (расширение вверх)
-  useEffect(() => {
-    const calculateMaxHeight = () => {
-      if (searchPillRef.current && topElementRef.current && (isSearchFocused || searchQuery.trim())) {
-        const searchRect = searchPillRef.current.getBoundingClientRect()
-        const topRect = topElementRef.current.getBoundingClientRect()
-        
-        // Вычисляем расстояние от нижнего края блока поиска до верхнего края topElement
-        // gap = 16px (отступ между элементами)
-        const gap = 16
-        const distance = searchRect.top - topRect.top
-        
-        // Максимальная высота = расстояние минус gap (отступ между блоками)
-        // Но нужно убедиться, что высота не меньше минимальной (56px)
-        const minHeight = 56
-        const calculatedMaxHeight = distance - gap
-        
-        if (calculatedMaxHeight >= minHeight) {
-          setMaxHeight(`${calculatedMaxHeight}px`)
-        } else {
-          setMaxHeight(`${minHeight}px`)
-        }
-      } else {
-        setMaxHeight(undefined)
-      }
-    }
-
-    // Вызываем расчет сразу и после небольших задержек для корректного результата после рендера
-    calculateMaxHeight()
-    const timeout1 = setTimeout(calculateMaxHeight, 50)
-    const timeout2 = setTimeout(calculateMaxHeight, 200)
-    const timeout3 = setTimeout(calculateMaxHeight, 500)
-
-    window.addEventListener('resize', calculateMaxHeight)
-    window.addEventListener('scroll', calculateMaxHeight)
-
-    return () => {
-      clearTimeout(timeout1)
-      clearTimeout(timeout2)
-      clearTimeout(timeout3)
-      window.removeEventListener('resize', calculateMaxHeight)
-      window.removeEventListener('scroll', calculateMaxHeight)
-    }
-  }, [isSearchFocused, searchQuery])
-
-  // Восстанавливаем фокус после изменения searchQuery, если input был в фокусе
-  useEffect(() => {
-    if (isSearchFocused && searchInputRef.current && document.activeElement !== searchInputRef.current) {
-      // Восстанавливаем фокус только если он был потерян
-      const timeoutId = setTimeout(() => {
-        searchInputRef.current?.focus()
-      }, 0)
-      return () => clearTimeout(timeoutId)
-    }
-  }, [searchQuery, isSearchFocused])
 
   const handleCreateFolder = () => {
     if (newFolderName.trim()) {
@@ -2285,8 +2230,8 @@ export default function Notes() {
                       onClick={() => setSelectedNoteIdWithLog(note.id, 'клик по заметке в папке')}
                       style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}
                     >
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div className="notes-folder-item-title">
+                      <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                        <div className="notes-folder-item-title" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {searchQuery.trim() ? highlightText(note.title || 'Без названия', searchQuery) : (note.title || 'Без названия')}
                         </div>
                         {note.content && (
@@ -2344,10 +2289,9 @@ export default function Notes() {
           <div className="notes-search-pill-wrapper">
             <div 
               ref={searchPillRef}
-              className={`notes-search-pill ${isSearchFocused || searchQuery.trim() ? 'notes-search-pill--expanded' : ''}`}
+              className="notes-search-pill"
               role="search" 
               aria-label="Поиск"
-              style={maxHeight ? { maxHeight } : undefined}
             >
               <div className="notes-search-pill__input-wrapper">
                 <svg className="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2368,63 +2312,10 @@ export default function Notes() {
                   onChange={e => {
                     setSearchQuery(e.target.value)
                   }}
-                  onFocus={() => setIsSearchFocused(true)}
-                  onBlur={() => {
-                    // Не сбрасываем фокус сразу, чтобы можно было кликнуть на результат
-                    setTimeout(() => setIsSearchFocused(false), 200)
-                  }}
                   className="notes-search-input"
                 />
               </div>
               
-              {/* Результаты поиска внутри расширенного блока */}
-              {(isSearchFocused || searchQuery.trim()) && (
-                <div className="notes-search-pill__results">
-                  {searchQuery.trim() && filteredNotes.length > 0 && (
-                    <div className="notes-search-pill__results-list">
-                      {filteredNotes.map(note => (
-                        <div
-                          key={note.id}
-                          className="notes-search-pill__result-item"
-                          onClick={() => {
-                            setSelectedNoteIdWithLog(note.id, 'при создании заметки в Notes.tsx')
-                          }}
-                        >
-                          <div className="notes-search-pill__result-title">
-                            {note.title || 'Без названия'}
-                          </div>
-                          {note.content && (
-                            <div className="notes-search-pill__result-content">
-                              {isTodoNote(note.content) ? <TodoMiniPreview content={note.content} /> : formatNotePreview(note.content, 80)}
-                            </div>
-                          )}
-                          {note.tags && note.tags.length > 0 && (
-                            <div className="notes-search-pill__result-tags">
-                              {note.tags.map(tag => (
-                                <span 
-                                  key={tag.id} 
-                                  className="notes-search-pill__result-tag"
-                                  style={{ 
-                                    color: tag.name.toLowerCase() === 'учеба' ? '#FFC300' : (tag.color || 'var(--fg-secondary)')
-                                  }}
-                                >
-                                  #{tag.name}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {searchQuery.trim() && filteredNotes.length === 0 && (
-                    <div className="notes-search-pill__no-results">
-                      Заметки не найдены
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
             <button 
               className="notes-create-note-btn"
@@ -2486,13 +2377,13 @@ export default function Notes() {
                     }}
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}
                   >
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                        <div className="notes-folder-item-title">
+                    <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', minWidth: 0 }}>
+                        <div className="notes-folder-item-title" style={{ flex: '1 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {highlightText(note.title || 'Без названия', searchQuery)}
                         </div>
                         {noteFolder && (
-                          <div className="notes-folder-badge">
+                          <div className="notes-folder-badge" style={{ flexShrink: 0 }}>
                             <FolderIcon width={14} height={14} />
                             <span>{noteFolder.name}</span>
                           </div>
@@ -2667,10 +2558,9 @@ export default function Notes() {
         <div className="notes-search-pill-wrapper">
           <div 
             ref={searchPillRef}
-            className={`notes-search-pill ${isSearchFocused || searchQuery.trim() ? 'notes-search-pill--expanded' : ''}`}
+            className="notes-search-pill"
             role="search" 
             aria-label="Поиск"
-            style={maxHeight ? { maxHeight } : undefined}
           >
             <div className="notes-search-pill__input-wrapper">
               <svg className="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2684,66 +2574,9 @@ export default function Notes() {
                 placeholder="Поиск"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                onFocus={() => setIsSearchFocused(true)}
-                onBlur={() => {
-                  // Не сбрасываем фокус сразу, чтобы можно было кликнуть на результат
-                  setTimeout(() => setIsSearchFocused(false), 200)
-                }}
                 className="notes-search-input"
               />
             </div>
-            
-            {/* Результаты поиска внутри расширенного блока */}
-            {(isSearchFocused || searchQuery.trim()) && (
-              <div className="notes-search-pill__results">
-                {searchQuery.trim() && filteredNotes.length > 0 && (
-                  <div className="notes-search-pill__results-list">
-                    {filteredNotes.map(note => (
-                      <div
-                        key={note.id}
-                        className="notes-search-pill__result-item"
-                        onClick={() => {
-                          if (note.folder_id) {
-                            setSelectedFolderId(note.folder_id)
-                            setSelectedNoteIdWithLog(note.id, 'при создании заметки в Notes.tsx')
-                          }
-                        }}
-                      >
-                        <div className="notes-search-pill__result-title">
-                          {note.title || 'Без названия'}
-                        </div>
-                        {note.content && (
-                          <div className="notes-search-pill__result-content">
-                            {formatNotePreview(note.content, 80)}
-                          </div>
-                        )}
-                        {note.tags && note.tags.length > 0 && (
-                          <div className="notes-search-pill__result-tags">
-                            {note.tags.map(tag => (
-                              <span 
-                                key={tag.id} 
-                                className="notes-search-pill__result-tag"
-                                style={{ 
-                                  color: tag.name.toLowerCase() === 'учеба' ? '#FFC300' : (tag.color || 'var(--fg-secondary)')
-                                }}
-                              >
-                                #{tag.name}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {searchQuery.trim() && filteredNotes.length === 0 && (
-                  <div className="notes-search-pill__no-results">
-                    Заметки не найдены
-                  </div>
-                )}
-              </div>
-            )}
           </div>
             <button 
               className="notes-create-note-btn"

@@ -20,12 +20,35 @@ export default function DeadlineModal({ open, onClose, onConfirm, initialDeadlin
       const now = new Date()
       if (initialDeadline) {
         // Если есть существующий дедлайн, используем его
-        const deadlineDate = new Date(initialDeadline)
-        setDay(deadlineDate.getDate().toString().padStart(2, '0'))
-        setMonth((deadlineDate.getMonth() + 1).toString().padStart(2, '0'))
-        setYear(deadlineDate.getFullYear().toString())
-        setHour(deadlineDate.getHours().toString().padStart(2, '0'))
-        setMinute(deadlineDate.getMinutes().toString().padStart(2, '0'))
+        // initialDeadline приходит в UTC формате (ISO строка)
+        // Убеждаемся, что строка имеет timezone информацию
+        let deadlineStr = initialDeadline
+        // Если строка не заканчивается на 'Z' или не имеет timezone offset, добавляем 'Z' (UTC)
+        if (!deadlineStr.endsWith('Z') && !deadlineStr.match(/[+-]\d{2}:\d{2}$/)) {
+          deadlineStr = deadlineStr + 'Z'
+        }
+        
+        // new Date() автоматически парсит UTC и конвертирует в локальное время браузера
+        const deadlineDate = new Date(deadlineStr)
+        
+        // Проверяем, что дата валидна
+        if (isNaN(deadlineDate.getTime())) {
+          console.error('Invalid deadline date:', initialDeadline)
+          // Используем текущую дату как fallback
+          setDay(now.getDate().toString().padStart(2, '0'))
+          setMonth((now.getMonth() + 1).toString().padStart(2, '0'))
+          setYear(now.getFullYear().toString())
+          setHour('00')
+          setMinute('00')
+        } else {
+          // Используем локальные методы - они возвращают время в часовом поясе пользователя
+          // getDate(), getMonth(), getFullYear(), getHours(), getMinutes() автоматически конвертируют UTC в локальное время
+          setDay(deadlineDate.getDate().toString().padStart(2, '0'))
+          setMonth((deadlineDate.getMonth() + 1).toString().padStart(2, '0'))
+          setYear(deadlineDate.getFullYear().toString())
+          setHour(deadlineDate.getHours().toString().padStart(2, '0'))
+          setMinute(deadlineDate.getMinutes().toString().padStart(2, '0'))
+        }
       } else {
         // Иначе используем текущую дату
         setDay(now.getDate().toString().padStart(2, '0'))
