@@ -80,6 +80,110 @@ docker compose -f docker-compose.github.yml up -d nginx-proxy letsencrypt
 echo "⏳ Waiting for Nginx proxy to be ready..."
 sleep 5
 
+# Функция для копирования сертификатов из других volumes в volume текущего проекта
+copy_certificates_to_project_volume() {
+    local compose_file=$1
+    
+    # Определяем volume текущего проекта
+    local project_volume
+    if [ -n "$COMPOSE_PROJECT_NAME" ]; then
+        project_volume="${COMPOSE_PROJECT_NAME}_nginx-certs"
+    else
+        local current_dir=$(basename "$(pwd)")
+        local dir_project_name=$(echo "$current_dir" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g')
+        project_volume="${dir_project_name}_nginx-certs"
+    fi
+    
+    # Проверяем, существует ли volume текущего проекта
+    if ! docker volume inspect "$project_volume" >/dev/null 2>&1; then
+        return 0
+    fi
+    
+    # Получаем список всех volumes с nginx-certs
+    local all_volumes
+    all_volumes=$(docker volume ls --format "{{.Name}}" 2>/dev/null | grep -E ".*nginx-certs$" || true)
+    
+    if [ -z "$all_volumes" ]; then
+        return 0
+    fi
+    
+    # Проверяем, есть ли сертификаты в volume текущего проекта
+    local certs_in_project_volume=0
+    if docker volume inspect "$project_volume" >/dev/null 2>&1; then
+        local temp_check
+        temp_check=$(docker run --rm -v "$project_volume:/certs" alpine sh -c "find /certs -type f \( -name '*.crt' -o -name '*.pem' \) 2>/dev/null | grep -v '\.key$' | grep -v 'key\.pem$' | grep -v 'privkey' | grep -v 'dhparam' | wc -l" 2>/dev/null || echo "0")
+        if [ "$temp_check" -gt 0 ]; then
+            certs_in_project_volume=1
+        fi
+    fi
+    
+    # Если сертификаты уже есть в volume проекта, не копируем
+    if [ $certs_in_project_volume -eq 1 ]; then
+        return 0
+    fi
+    
+    # Ищем сертификаты в других volumes
+    local source_volume=""
+    while IFS= read -r volume_name; do
+        if [ -z "$volume_name" ] || [ "$volume_name" = "$project_volume" ]; then
+            continue
+        fi
+        
+        # Проверяем, есть ли файлы сертификатов в этом volume
+        local cert_count
+        cert_count=$(docker run --rm -v "$volume_name:/certs" alpine sh -c "find /certs -type f \( -name '*.crt' -o -name '*.pem' \) 2>/dev/null | grep -v '\.key$' | grep -v 'key\.pem$' | grep -v 'privkey' | grep -v 'dhparam' | wc -l" 2>/dev/null || echo "0")
+        
+        if [ "$cert_count" -gt 0 ]; then
+            source_volume="$volume_name"
+            break
+        fi
+    done <<< "$all_volumes"
+    
+    # Если нашли source volume с сертификатами, копируем их
+    if [ -n "$source_volume" ]; then
+        echo ""
+        echo "📋 Found certificates in volume: $source_volume"
+        echo "   Copying to project volume: $project_volume"
+        
+        # Используем переменные из .env (уже загружены в скрипте)
+        local backend_domain="${BACKEND_DOMAIN:-}"
+        local webhook_domain="${WEBHOOK_DOMAIN:-}"
+        
+        docker run --rm \
+          -v "$source_volume:/source:ro" \
+          -v "$project_volume:/dest" \
+          alpine sh -c "
+            # Копируем backend сертификаты (файлы из поддиректории)
+            if [ -n '$backend_domain' ] && [ -d /source/$backend_domain ]; then
+              cp -r /source/$backend_domain /dest/ 2>/dev/null || true
+              # Также копируем симлинки из корня, если они есть
+              if [ -L /source/$backend_domain.crt ] || [ -f /source/$backend_domain.crt ]; then
+                cp -L /source/$backend_domain.crt /dest/$backend_domain.crt 2>/dev/null || true
+                cp -L /source/$backend_domain.key /dest/$backend_domain.key 2>/dev/null || true
+              fi
+            fi
+            # Копируем webhook сертификаты
+            if [ -n '$webhook_domain' ] && [ -d /source/$webhook_domain ]; then
+              cp -r /source/$webhook_domain /dest/ 2>/dev/null || true
+              if [ -L /source/$webhook_domain.crt ] || [ -f /source/$webhook_domain.crt ]; then
+                cp -L /source/$webhook_domain.crt /dest/$webhook_domain.crt 2>/dev/null || true
+                cp -L /source/$webhook_domain.key /dest/$webhook_domain.key 2>/dev/null || true
+              fi
+            fi
+            echo '✅ Certificates copied successfully'
+          " >/dev/null 2>&1
+        
+        # Перезапускаем nginx-proxy, чтобы он подхватил сертификаты
+        echo "   Restarting nginx-proxy to load certificates..."
+        docker compose -f "$compose_file" restart nginx-proxy >/dev/null 2>&1
+        sleep 2
+        
+        return 0
+    fi
+    
+    return 0
+}
+
 # Функция для проверки и получения сертификатов
 check_and_obtain_certificates() {
     local compose_file=$1
@@ -88,6 +192,9 @@ check_and_obtain_certificates() {
     
     echo ""
     echo "🔒 Checking SSL certificates..."
+    
+    # Сначала пытаемся скопировать сертификаты из других volumes
+    copy_certificates_to_project_volume "$compose_file"
     
     # Проверяем наличие скрипта проверки
     if [ ! -f "./check-certificates.sh" ]; then
