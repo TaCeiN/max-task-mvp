@@ -6368,6 +6368,7 @@ body {
 /* Settings Page Styles */
 .settings-container {
   padding: clamp(16px, 4vw, 24px);
+  padding-bottom: clamp(48px, 8vw, 80px);
   max-width: 800px;
   margin: 0 auto;
   width: 100%;

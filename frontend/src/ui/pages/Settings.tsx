@@ -27,13 +27,28 @@ export default function Settings() {
   })
 
   const [newNotificationTime, setNewNotificationTime] = useState<string>('')
+  const [timeUnit, setTimeUnit] = useState<'minutes' | 'hours' | 'days'>('minutes')
+
+  const convertToMinutes = (value: number, unit: 'minutes' | 'hours' | 'days'): number => {
+    switch (unit) {
+      case 'minutes':
+        return value
+      case 'hours':
+        return value * 60
+      case 'days':
+        return value * 24 * 60
+      default:
+        return value
+    }
+  }
 
   const handleAddNotificationTime = () => {
-    const minutes = parseInt(newNotificationTime)
-    if (isNaN(minutes) || minutes < 0) {
-      alert('Введите корректное число минут (неотрицательное)')
+    const value = parseFloat(newNotificationTime)
+    if (isNaN(value) || value < 0) {
+      alert('Введите корректное число (неотрицательное)')
       return
     }
+    const minutes = convertToMinutes(value, timeUnit)
     const currentTimes = settings?.notification_times_minutes || []
     if (currentTimes.length >= 10) {
       alert('Максимум 10 времен уведомлений')
@@ -102,7 +117,7 @@ export default function Settings() {
         <div className="settings-section">
           <h2 className="settings-section-title">Уведомления</h2>
           <p className="settings-description" style={{ marginBottom: '16px' }}>
-            Добавьте времена (в минутах), за которые вы хотите получать уведомления о дедлайнах (максимум 10)
+            Добавьте времена, за которые вы хотите получать уведомления о дедлайнах (максимум 10). Вы можете выбрать минуты, часы или дни.
           </p>
           
           {/* Добавление нового времени */}
@@ -110,7 +125,8 @@ export default function Settings() {
             <input
               type="number"
               min="0"
-              placeholder="Минуты до дедлайна"
+              step={timeUnit === 'minutes' ? '1' : '0.1'}
+              placeholder={timeUnit === 'minutes' ? 'Минуты' : timeUnit === 'hours' ? 'Часы' : 'Дни'}
               value={newNotificationTime}
               onChange={(e) => setNewNotificationTime(e.target.value)}
               onKeyPress={(e) => {
@@ -121,6 +137,16 @@ export default function Settings() {
               className="settings-input"
               style={{ flex: '1 1 auto', minWidth: '120px', maxWidth: '200px' }}
             />
+            <select
+              value={timeUnit}
+              onChange={(e) => setTimeUnit(e.target.value as 'minutes' | 'hours' | 'days')}
+              className="settings-input"
+              style={{ flex: '0 0 auto', minWidth: '100px', maxWidth: '120px', padding: '12px 16px', cursor: 'pointer' }}
+            >
+              <option value="minutes">Минуты</option>
+              <option value="hours">Часы</option>
+              <option value="days">Дни</option>
+            </select>
             <button
               className="settings-option"
               onClick={handleAddNotificationTime}

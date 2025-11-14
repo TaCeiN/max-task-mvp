@@ -18,14 +18,6 @@ export const faqData: Record<'ru' | 'en', FAQItem[]> = {
       answer: 'Уведомления отправляются за указанное время до дедлайна. Вы можете настроить это время в настройках.'
     },
     {
-      question: 'Как изменить тему оформления?',
-      answer: 'Перейдите в настройки и выберите светлую или тёмную тему.'
-    },
-    {
-      question: 'Как изменить язык интерфейса?',
-      answer: 'В настройках выберите нужный язык из списка доступных языков.'
-    },
-    {
       question: 'Как организовать заметки в папки?',
       answer: 'Вы можете создавать папки и перемещать заметки между ними. Используйте кнопку выбора папки в редакторе заметки.'
     }
@@ -42,14 +34,6 @@ export const faqData: Record<'ru' | 'en', FAQItem[]> = {
     {
       question: 'How do notifications work?',
       answer: 'Notifications are sent at the specified time before the deadline. You can configure this time in settings.'
-    },
-    {
-      question: 'How to change the theme?',
-      answer: 'Go to settings and select light or dark theme.'
-    },
-    {
-      question: 'How to change the interface language?',
-      answer: 'In settings, select the desired language from the list of available languages.'
     },
     {
       question: 'How to organize notes in folders?',
