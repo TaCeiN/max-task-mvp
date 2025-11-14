@@ -11,6 +11,79 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# Функция для определения имени Docker volume с сертификатами
+# Docker Compose добавляет префикс имени проекта к volumes
+find_nginx_certs_volume() {
+    local possible_volumes=()
+    
+    # 1. Проверяем переменную окружения COMPOSE_PROJECT_NAME
+    if [ -n "$COMPOSE_PROJECT_NAME" ]; then
+        possible_volumes+=("${COMPOSE_PROJECT_NAME}_nginx-certs")
+    fi
+    
+    # 2. Пытаемся определить имя проекта из текущей директории
+    local current_dir=$(basename "$(pwd)")
+    local dir_project_name=$(echo "$current_dir" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g')
+    possible_volumes+=("${dir_project_name}_nginx-certs")
+    
+    # 3. Проверяем все существующие volumes с nginx-certs
+    local existing_volumes
+    existing_volumes=$(docker volume ls --format "{{.Name}}" 2>/dev/null | grep -E ".*nginx-certs$" || true)
+    
+    if [ -n "$existing_volumes" ]; then
+        while IFS= read -r vol; do
+            if [ -n "$vol" ]; then
+                # Проверяем, что volume еще не добавлен в список
+                local found=0
+                for existing in "${possible_volumes[@]}"; do
+                    if [ "$existing" = "$vol" ]; then
+                        found=1
+                        break
+                    fi
+                done
+                if [ $found -eq 0 ]; then
+                    possible_volumes+=("$vol")
+                fi
+            fi
+        done <<< "$existing_volumes"
+    fi
+    
+    # 4. Добавляем вариант без префикса (для обратной совместимости)
+    possible_volumes+=("nginx-certs")
+    
+    # Проверяем каждый volume на наличие файлов
+    for volume_name in "${possible_volumes[@]}"; do
+        if docker volume inspect "$volume_name" >/dev/null 2>&1; then
+            # Проверяем, что volume не пустой
+            local temp_container
+            temp_container=$(docker run -d --rm -v "$volume_name:/certs" alpine sleep 3600 2>/dev/null || echo "")
+            
+            if [ -n "$temp_container" ]; then
+                # Проверяем, есть ли хотя бы один файл в volume
+                local file_count
+                file_count=$(docker exec "$temp_container" sh -c "ls -1 /certs 2>/dev/null | wc -l" 2>/dev/null || echo "0")
+                docker stop "$temp_container" >/dev/null 2>&1 || true
+                
+                if [ "$file_count" -gt 0 ]; then
+                    echo "$volume_name"
+                    return 0
+                fi
+            fi
+        fi
+    done
+    
+    # Если ничего не найдено, возвращаем первое возможное имя (для создания нового volume)
+    if [ -n "$COMPOSE_PROJECT_NAME" ]; then
+        echo "${COMPOSE_PROJECT_NAME}_nginx-certs"
+    elif [ -n "$dir_project_name" ]; then
+        echo "${dir_project_name}_nginx-certs"
+    else
+        echo "nginx-certs"
+    fi
+    
+    return 1
+}
+
 # Функция для проверки сертификата
 check_certificate() {
     local domain=$1
@@ -48,7 +121,14 @@ check_certificate() {
 # Функция для поиска сертификата в Docker volume
 find_cert_in_volume() {
     local domain=$1
-    local volume_name="nginx-certs"
+    
+    # Определяем правильное имя volume (с учетом префикса проекта)
+    local volume_name
+    volume_name=$(find_nginx_certs_volume)
+    
+    if [ -z "$volume_name" ]; then
+        return 1
+    fi
     
     # Проверяем, существует ли volume
     if ! docker volume inspect "$volume_name" >/dev/null 2>&1; then
@@ -149,6 +229,12 @@ fi
 echo "Проверка SSL сертификатов для доменов из .env:"
 echo "  BACKEND_DOMAIN: $BACKEND_DOMAIN"
 echo "  WEBHOOK_DOMAIN: $WEBHOOK_DOMAIN"
+
+# Определяем используемый volume для информационного вывода
+DETECTED_VOLUME=$(find_nginx_certs_volume 2>/dev/null || echo "")
+if [ -n "$DETECTED_VOLUME" ]; then
+    echo "  Используемый Docker volume: $DETECTED_VOLUME"
+fi
 echo ""
 
 # Проверяем сертификаты
