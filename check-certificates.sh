@@ -118,14 +118,11 @@ check_certificate() {
     return 0
 }
 
-# Функция для поиска сертификата в Docker volume
-# Универсальный поиск - находит сертификаты независимо от структуры и имен файлов
-find_cert_in_volume() {
+# Функция для поиска сертификата в конкретном Docker volume
+# Проверяет один volume на наличие валидного сертификата для домена
+find_cert_in_single_volume() {
     local domain=$1
-    
-    # Определяем правильное имя volume (с учетом префикса проекта)
-    local volume_name
-    volume_name=$(find_nginx_certs_volume)
+    local volume_name=$2
     
     if [ -z "$volume_name" ]; then
         return 1
@@ -293,6 +290,36 @@ find_cert_in_volume() {
     return 1
 }
 
+# Функция для поиска сертификата в Docker volume
+# Универсальный поиск - проверяет ВСЕ volumes с nginx-certs
+# Находит сертификаты независимо от структуры и имен файлов
+find_cert_in_volume() {
+    local domain=$1
+    
+    # Получаем список всех volumes с nginx-certs
+    local all_volumes
+    all_volumes=$(docker volume ls --format "{{.Name}}" 2>/dev/null | grep -E ".*nginx-certs$" || true)
+    
+    if [ -z "$all_volumes" ]; then
+        return 1
+    fi
+    
+    # Проверяем каждый volume
+    while IFS= read -r volume_name; do
+        if [ -z "$volume_name" ]; then
+            continue
+        fi
+        
+        # Пытаемся найти сертификат в этом volume
+        if find_cert_in_single_volume "$domain" "$volume_name"; then
+            return 0
+        fi
+    done <<< "$all_volumes"
+    
+    # Не нашли ни в одном volume
+    return 1
+}
+
 # Функция для поиска сертификата в файловой системе хоста
 find_cert_on_host() {
     local domain=$1
@@ -353,10 +380,15 @@ echo "Проверка SSL сертификатов для доменов из .
 echo "  BACKEND_DOMAIN: $BACKEND_DOMAIN"
 echo "  WEBHOOK_DOMAIN: $WEBHOOK_DOMAIN"
 
-# Определяем используемый volume для информационного вывода
-DETECTED_VOLUME=$(find_nginx_certs_volume 2>/dev/null || echo "")
-if [ -n "$DETECTED_VOLUME" ]; then
-    echo "  Используемый Docker volume: $DETECTED_VOLUME"
+# Показываем все volumes, которые будут проверяться
+ALL_VOLUMES=$(docker volume ls --format "{{.Name}}" 2>/dev/null | grep -E ".*nginx-certs$" || echo "")
+if [ -n "$ALL_VOLUMES" ]; then
+    echo "  Проверяемые Docker volumes:"
+    while IFS= read -r vol; do
+        if [ -n "$vol" ]; then
+            echo "    - $vol"
+        fi
+    done <<< "$ALL_VOLUMES"
 fi
 echo ""
 
