@@ -29,7 +29,9 @@ export default function Settings() {
   const [newNotificationTime, setNewNotificationTime] = useState<string>('')
   const [timeUnit, setTimeUnit] = useState<'minutes' | 'hours' | 'days'>('minutes')
   const [isTimeUnitMenuOpen, setIsTimeUnitMenuOpen] = useState(false)
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number; width: number } | null>(null)
   const timeUnitSelectorRef = useRef<HTMLDivElement>(null)
+  const timeUnitButtonRef = useRef<HTMLButtonElement>(null)
 
   const convertToMinutes = (value: number, unit: 'minutes' | 'hours' | 'days'): number => {
     switch (unit) {
@@ -80,6 +82,19 @@ export default function Settings() {
   const handleTimeUnitSelect = (unit: 'minutes' | 'hours' | 'days') => {
     setTimeUnit(unit)
     setIsTimeUnitMenuOpen(false)
+    setMenuPosition(null)
+  }
+
+  const handleToggleMenu = () => {
+    if (!isTimeUnitMenuOpen && timeUnitButtonRef.current) {
+      const rect = timeUnitButtonRef.current.getBoundingClientRect()
+      setMenuPosition({
+        top: rect.bottom + 8,
+        left: rect.left,
+        width: rect.width
+      })
+    }
+    setIsTimeUnitMenuOpen(!isTimeUnitMenuOpen)
   }
 
   // Закрытие меню при клике вне его
@@ -87,6 +102,7 @@ export default function Settings() {
     const handleClickOutside = (event: MouseEvent) => {
       if (timeUnitSelectorRef.current && !timeUnitSelectorRef.current.contains(event.target as Node)) {
         setIsTimeUnitMenuOpen(false)
+        setMenuPosition(null)
       }
     }
 
@@ -170,10 +186,11 @@ export default function Settings() {
             <div className="time-unit-selector" ref={timeUnitSelectorRef} style={{ position: 'relative', flex: '0 0 auto' }}>
               <button
                 type="button"
+                ref={timeUnitButtonRef}
                 className="time-unit-selector-button"
                 onClick={(e) => {
                   e.stopPropagation()
-                  setIsTimeUnitMenuOpen(!isTimeUnitMenuOpen)
+                  handleToggleMenu()
                 }}
               >
                 {timeUnitLabels[timeUnit]}
@@ -201,11 +218,21 @@ export default function Settings() {
                       left: 0,
                       right: 0,
                       bottom: 0,
-                      zIndex: 999
+                      zIndex: 9999
                     }}
-                    onClick={() => setIsTimeUnitMenuOpen(false)}
+                    onClick={() => {
+                      setIsTimeUnitMenuOpen(false)
+                      setMenuPosition(null)
+                    }}
                   />
-                  <div className="time-unit-selector-menu">
+                  <div 
+                    className="time-unit-selector-menu"
+                    style={menuPosition ? {
+                      top: `${menuPosition.top}px`,
+                      left: `${menuPosition.left}px`,
+                      width: `${menuPosition.width}px`
+                    } : undefined}
+                  >
                     <div
                       className={`time-unit-selector-item ${timeUnit === 'minutes' ? 'time-unit-selector-item--active' : ''}`}
                       onClick={(e) => {

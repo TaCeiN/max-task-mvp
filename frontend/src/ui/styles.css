@@ -6525,6 +6525,7 @@ body {
 .time-unit-selector {
   position: relative;
   display: inline-block;
+  z-index: 1;
 }
 
 .time-unit-selector-button {
@@ -6559,10 +6560,7 @@ body {
 }
 
 .time-unit-selector-menu {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
+  position: fixed;
   margin-top: 8px;
   background: rgba(0, 0, 0, 0.85);
   backdrop-filter: blur(71px) brightness(1.1) saturate(1.2);
@@ -6570,8 +6568,8 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
   padding: 8px;
-  min-width: 100%;
-  z-index: 1000;
+  min-width: 120px;
+  z-index: 10000;
   box-shadow: 
     0 4px 20px rgba(0, 0, 0, 0.5),
     inset 0 1px 8px 0 rgba(255, 255, 255, 0.1);
