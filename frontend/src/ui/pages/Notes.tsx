@@ -407,6 +407,7 @@ export default function Notes() {
   const searchPillRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const topElementRef = useRef<HTMLDivElement>(null)
+  const searchPillWrapperRef = useRef<HTMLDivElement>(null)
   
   const { data: folders, isLoading: foldersLoading } = useQuery({ 
     queryKey: ['folders'], 
@@ -1196,6 +1197,7 @@ export default function Notes() {
       folders
     }
   }, [createNote, folders])
+
 
   // Регистрируем обработчик создания заметки в контексте
   // Используем ref для избежания бесконечных циклов при изменении зависимостей
@@ -2286,7 +2288,10 @@ export default function Notes() {
         
         {/* Поиск и кнопка создания заметки внизу */}
         {!isNoteEditorOpen && (
-          <div className="notes-search-pill-wrapper">
+          <div 
+            ref={searchPillWrapperRef}
+            className="notes-search-pill-wrapper"
+          >
             <div 
               ref={searchPillRef}
               className="notes-search-pill"

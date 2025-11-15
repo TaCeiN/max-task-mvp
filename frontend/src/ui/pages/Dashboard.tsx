@@ -111,6 +111,7 @@ export default function Dashboard() {
   const notificationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [maxHeight, setMaxHeight] = useState<string | undefined>(undefined)
   const [hasToken, setHasToken] = useState<boolean>(() => !!localStorage.getItem('token'))
+  const searchInputRef = useRef<HTMLInputElement>(null)
   
   // Проверяем наличие токена периодически
   useEffect(() => {
@@ -396,6 +397,14 @@ export default function Dashboard() {
 
   const isSearchActive = isSearchFocused || searchQuery.trim()
 
+  const handleCloseSearch = () => {
+    setSearchQuery('')
+    setIsSearchFocused(false)
+    if (searchInputRef.current) {
+      searchInputRef.current.blur()
+    }
+  }
+
   return (
     <main className="screen">
       {/* Top-wide Goal Card */}
@@ -549,6 +558,7 @@ export default function Dashboard() {
             <path d="M21 21L16.65 16.65" stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round"/>
           </svg>
           <input
+            ref={searchInputRef}
             type="text"
             placeholder="Поиск"
             value={searchQuery}
@@ -565,6 +575,18 @@ export default function Dashboard() {
               padding: 0
             }}
           />
+          {isSearchActive && (
+            <button
+              type="button"
+              onClick={handleCloseSearch}
+              className="search-pill__close-btn"
+              aria-label="Закрыть поиск"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          )}
         </div>
         
         {/* Результаты поиска внутри расширенного блока */}
