@@ -75,28 +75,27 @@ def check_and_send_notifications():
     db = SessionLocal()
     try:
         now = datetime.now(timezone.utc)
-        two_minutes_ago = now - timedelta(minutes=2)
         
-        # Проверяем дедлайны, которые только что истекли (в последние 2 минуты)
-        # Автоматическое уведомление отправляется в момент просрочки
-        # Окно в 2 минуты гарантирует, что момент просрочки будет точно пойман
-        expired_deadlines = db.query(Deadline).filter(
+        # Проверяем ВСЕ просроченные дедлайны, для которых еще не было отправлено уведомление
+        # Получаем все просроченные дедлайны
+        all_expired_deadlines = db.query(Deadline).filter(
             Deadline.notification_enabled == True,
-            Deadline.deadline_at <= now,
-            Deadline.deadline_at >= two_minutes_ago
+            Deadline.deadline_at <= now
         ).all()
+        
+        # Фильтруем только те, для которых еще не было отправлено уведомление об окончании
+        expired_deadlines = []
+        for deadline in all_expired_deadlines:
+            existing_notification = db.query(DeadlineNotification).filter(
+                DeadlineNotification.deadline_id == deadline.id,
+                DeadlineNotification.notification_type == "expired"
+            ).first()
+            if not existing_notification:
+                expired_deadlines.append(deadline)
         
         # Отправляем уведомления об окончании дедлайнов
         for deadline in expired_deadlines:
             try:
-                # Проверяем, не было ли уже отправлено уведомление об окончании
-                existing_notification = db.query(DeadlineNotification).filter(
-                    DeadlineNotification.deadline_id == deadline.id,
-                    DeadlineNotification.notification_type == "expired"
-                ).first()
-                
-                if existing_notification:
-                    continue  # Уведомление уже отправлено
                 
                 # Получаем заметку и пользователя
                 note = db.query(Note).filter(Note.id == deadline.note_id).first()
