@@ -2006,6 +2006,12 @@ textarea {
   .row--hidden-on-search {
     display: none !important;
   }
+  
+  /* Расширение поля поиска на всю доступную высоту при активном поиске */
+  .search-pill--expanded {
+    max-height: calc(100vh - 40px) !important;
+    height: calc(100vh - 40px) !important;
+  }
 }
 
 /* D. Search Bar */
@@ -5415,6 +5421,8 @@ body {
     padding-bottom: 1.25rem;
     border-radius: 20px;
     min-height: 56px; /* Минимальная высота для видимости */
+    max-height: calc(100vh - 40px); /* Занимает всю доступную высоту экрана */
+    height: calc(100vh - 40px); /* Фиксированная высота для полного экрана */
   }
 
   .search-pill .icon {

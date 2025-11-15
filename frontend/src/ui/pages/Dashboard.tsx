@@ -300,6 +300,14 @@ export default function Dashboard() {
   // Вычисляем максимальную высоту для расширенного блока поиска
   useEffect(() => {
     const calculateMaxHeight = () => {
+      // На мобильных устройствах, когда поиск активен, используем полную высоту экрана
+      const isMobile = window.innerWidth <= 768
+      if (isMobile && (isSearchFocused || searchQuery.trim())) {
+        // На мобильных не устанавливаем maxHeight, чтобы CSS мог управлять высотой
+        setMaxHeight(undefined)
+        return
+      }
+      
       if (searchPillRef.current && scenarioPillRef.current && (isSearchFocused || searchQuery.trim())) {
         const searchRect = searchPillRef.current.getBoundingClientRect()
         const scenarioRect = scenarioPillRef.current.getBoundingClientRect()
