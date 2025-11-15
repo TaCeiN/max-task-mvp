@@ -386,11 +386,13 @@ export default function Dashboard() {
   const dayNumber = now.getDate()
   const monthName = months[now.getMonth()]
 
+  const isSearchActive = isSearchFocused || searchQuery.trim()
+
   return (
     <main className="screen">
       {/* Top-wide Goal Card */}
       <section 
-        className="card card--goal" 
+        className={`card card--goal ${isSearchActive ? 'card--hidden-on-search' : ''}`}
         role="button" 
         aria-label={favoriteNote ? favoriteNote.title : "Цель не задана"}
         onClick={() => {
@@ -483,7 +485,7 @@ export default function Dashboard() {
       </section>
 
       {/* Middle row - две квадратные карточки */}
-      <div className="row two-columns">
+      <div className={`row two-columns ${isSearchActive ? 'row--hidden-on-search' : ''}`}>
         {/* Date Card */}
         <div 
           className="card card--date" 

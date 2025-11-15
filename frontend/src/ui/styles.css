@@ -1125,9 +1125,13 @@ textarea {
 
 @media (max-width: 768px) {
   .card--goal {
-    height: 125px;
+    min-height: 125px;
+    max-height: 200px;
+    height: auto;
     padding: 20px 24px;
     border-radius: 24px;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
   
   .card--goal .title {
@@ -1202,9 +1206,13 @@ textarea {
 
 @media (max-width: 360px) {
   .card--goal {
-    height: 112px;
+    min-height: 112px;
+    max-height: 180px;
+    height: auto;
     padding: 18px 20px;
     border-radius: 20px;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
   
   .card--goal .title {
@@ -1987,6 +1995,17 @@ textarea {
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
+}
+
+/* Скрытие карточек при активном поиске на мобильных */
+@media (max-width: 768px) {
+  .card--hidden-on-search {
+    display: none !important;
+  }
+  
+  .row--hidden-on-search {
+    display: none !important;
+  }
 }
 
 /* D. Search Bar */
