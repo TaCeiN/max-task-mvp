@@ -855,6 +855,20 @@ textarea {
   .row.two-columns {
     gap: 12px;
   }
+
+  /* Search Pill - улучшение для мобильных устройств */
+  .search-pill {
+    scroll-margin-top: 20px; /* Отступ для корректной прокрутки */
+  }
+
+  .search-pill--expanded {
+    min-height: 56px; /* Минимальная высота для видимости при открытой клавиатуре */
+  }
+
+  .search-pill__results-list {
+    /* Улучшаем максимальную высоту результатов поиска на мобильных */
+    max-height: calc(100vh - 400px);
+  }
 }
 
 @media (max-width: 360px) {
@@ -5374,12 +5388,14 @@ body {
     height: 48px;
     padding: 0 0.75rem;
     gap: 10px;
+    scroll-margin-top: 20px; /* Отступ для корректной прокрутки */
   }
 
   .search-pill--expanded {
     padding: 0.75rem;
     padding-bottom: 1.25rem;
     border-radius: 20px;
+    min-height: 56px; /* Минимальная высота для видимости */
   }
 
   .search-pill .icon {

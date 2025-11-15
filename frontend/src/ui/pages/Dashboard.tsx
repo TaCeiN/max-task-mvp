@@ -350,6 +350,33 @@ export default function Dashboard() {
       }
     }
   }, [])
+
+  // Автоматическая прокрутка к поиску при фокусе на мобильных устройствах
+  useEffect(() => {
+    if (isSearchFocused && searchPillRef.current) {
+      // Проверяем, является ли устройство мобильным
+      const isMobile = window.innerWidth <= 768
+      
+      if (isMobile) {
+        // Небольшая задержка для корректной работы с клавиатурой
+        const scrollTimeout = setTimeout(() => {
+          if (searchPillRef.current) {
+            const element = searchPillRef.current
+            const elementTop = element.getBoundingClientRect().top + window.pageYOffset
+            const offset = 20 // Отступ сверху для лучшей видимости
+            
+            // Прокручиваем к элементу с плавной анимацией
+            window.scrollTo({
+              top: elementTop - offset,
+              behavior: 'smooth'
+            })
+          }
+        }, 100) // Задержка для того, чтобы клавиатура успела открыться
+
+        return () => clearTimeout(scrollTimeout)
+      }
+    }
+  }, [isSearchFocused])
   
   // Получаем текущую дату
   const now = new Date()

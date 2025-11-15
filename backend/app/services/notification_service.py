@@ -75,13 +75,15 @@ def check_and_send_notifications():
     db = SessionLocal()
     try:
         now = datetime.now(timezone.utc)
-        one_minute_ago = now - timedelta(minutes=1)
+        two_minutes_ago = now - timedelta(minutes=2)
         
-        # Сначала проверяем дедлайны, которые только что истекли (в последнюю минуту)
+        # Проверяем дедлайны, которые только что истекли (в последние 2 минуты)
+        # Автоматическое уведомление отправляется в момент просрочки
+        # Окно в 2 минуты гарантирует, что момент просрочки будет точно пойман
         expired_deadlines = db.query(Deadline).filter(
             Deadline.notification_enabled == True,
             Deadline.deadline_at <= now,
-            Deadline.deadline_at >= one_minute_ago
+            Deadline.deadline_at >= two_minutes_ago
         ).all()
         
         # Отправляем уведомления об окончании дедлайнов
@@ -114,7 +116,7 @@ def check_and_send_notifications():
                 if not user:
                     continue
                 
-                # Отправляем уведомление об окончании дедлайна
+                # Отправляем уведомление об окончании дедлайна (без указания времени просрочки)
                 message = f'Дедлайн "{note.title}" истек'
                 
                 from ..core.config import settings
